@@ -1,7 +1,7 @@
 streamlit
-yahoo_fin==0.8.9
-transformers==4.33.2
+yahoo_fin
+yfinance
+transformers
 torch
-pandas==2.1.0
-yfinance==0.2.26
-streamlit-aggrid==0.3.0
+pandas
+streamlit-aggrid
