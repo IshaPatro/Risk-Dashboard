@@ -24,13 +24,21 @@ def fetch_stock_data(ticker):
     """Fetch stock price details from Yahoo Finance."""
     stock = yf.Ticker(ticker)
     info = stock.info
+    current_price = info.get("regularMarketPrice")
+    previous_close = info.get("regularMarketPreviousClose")
+    
+    if current_price and previous_close:
+        one_day_change_pct = ((current_price - previous_close) / previous_close) * 100
+        one_day_change_pct = round(one_day_change_pct, 2) 
+    else:
+        one_day_change_pct = None
+    
     return {
         "Ticker": ticker,
-        "Current Price": info.get("regularMarketPrice"),
-        "High": info.get("dayHigh"),
-        "Low": info.get("dayLow"),
-        "PE Ratio": info.get("trailingPE"),
-        "PB Ratio": info.get("priceToBook")
+        "Current Price": current_price,
+        "1-Day Change (%)": one_day_change_pct,
+        "PE Ratio": round(info.get("trailingPE"), 2),
+        "PB Ratio": round(info.get("priceToBook"), 2)
     }
 
 def fetch_and_analyze_news(ticker):
@@ -42,38 +50,23 @@ def fetch_and_analyze_news(ticker):
         return title, sentiment
     return "No recent news", 0.0
 
-def apply_color(val):
-    """Apply color from red (-1) to green (1) based on sentiment."""
-    color = f"rgba({255 - int(255 * (val + 1) / 2)}, {int(255 * (val + 1) / 2)}, 0, 1)"  # Red to Green scale
-    return f'background-color: {color}; color: white'
-
+cellstyle_jscode = """
+function(params) {
+    if (params.value < 0) {
+        return {
+            'color': 'red'
+        }
+    } else {
+        return {
+            'color': 'green'
+        }
+    }
+}
+"""
 
 all_tickers = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]['Symbol']
 st.title("📈 Real-Time Stock Dashboard with News Sentiment Analysis")
 tickers = st.multiselect("Select Stock Tickers", all_tickers, default=["AAPL", "TSLA", "GOOGL", "AMZN", "MSFT"])
-
-cellstyle_jscode = JsCode("""
-function(params){
-    if (params.value == '0') {
-        return {
-            'color': 'black', 
-            'backgroundColor': 'orange',
-        }
-    }
-    if (params.value < '0') {
-        return{
-            'color': 'white',
-            'backgroundColor': 'red',
-        }
-    }
-    if (params.value > '0') {
-        return{
-            'color': 'white',
-            'backgroundColor': 'green',
-        }
-    }
-}
-""")
 
 data = []
 for ticker in tickers:
@@ -84,11 +77,11 @@ for ticker in tickers:
     data.append(stock_info)
 
 df = pd.DataFrame(data)
-df_styled = df.style.applymap(lambda x: apply_color(x) if isinstance(x, (int, float)) else '', subset=["News Sentiment"])
 
 gb = GridOptionsBuilder.from_dataframe(df)
 gb.configure_pagination()
 gb.configure_side_bar()
+# gb.configure_column("1-Day Change (%)", cellStyle=cellstyle_jscode)
 grid_options = gb.build()
-AgGrid(df_styled.data, gridOptions=grid_options, fit_columns_on_grid_load=True)
+AgGrid(df, gridOptions=grid_options, fit_columns_on_grid_load=True)
 
