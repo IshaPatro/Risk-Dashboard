@@ -1,4 +1,3 @@
-
 import time
 import streamlit as st
 import pandas as pd
@@ -6,7 +5,7 @@ import yfinance as yf
 from yahoo_fin import news, stock_info
 from transformers import BertTokenizer, BertForSequenceClassification
 import torch
-from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 tokenizer = BertTokenizer.from_pretrained("yiyanghkust/finbert-tone")
 model = BertForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
@@ -39,11 +38,7 @@ def fetch_stock_data(ticker):
         "Current Price": current_price,
         "1-Day Change (%)": one_day_change_pct,
         "PE Ratio": round(info.get("trailingPE"), 2),
-        "PB Ratio": round(info.get("priceToBook"), 2),
-        "Volatility": round(volatility * 100, 2),  
-        "Beta": info.get("beta") if info.get("beta") else None,
-        "VaR (95%)": round(var_95 * 100, 2), 
-        "Sharpe Ratio": round(sharpe_ratio, 2)
+        "PB Ratio": round(info.get("priceToBook"), 2)
     }
     
 def fetch_and_analyze_news(ticker):
