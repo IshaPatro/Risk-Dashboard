@@ -113,7 +113,7 @@ def assess_risk(volatility, beta, var_95, sharpe_ratio, latest_news):
     return risk_level, response
 
 all_tickers = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]['Symbol']
-st.title("📈 Real-Time Stock Dashboard with News Sentiment Analysis")
+st.title("📈 Real-Time Stock Dashboard with Risk Analysis")
 tickers = st.multiselect("Select Stock Tickers", all_tickers, default=["AAPL", "TSLA", "GOOGL", "AMZN", "MSFT"])
 
 data = []
