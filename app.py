@@ -35,7 +35,7 @@ def fetch_stock_data(ticker, retries=3, delay=5):
             info = stock.info
 
             if not info:
-                os.write(f"No data found for {ticker}")
+                print(f"No data found for {ticker}")
                 return None
 
             current_price = info.get("regularMarketPrice")
@@ -59,12 +59,12 @@ def fetch_stock_data(ticker, retries=3, delay=5):
             }
         
         except YFRateLimitError:
-            os.write(f"Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
+            print(f"Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
             time.sleep(delay)
             delay *= 2 
         
         except Exception as e:
-            os.write(f"Error fetching data for {ticker}: {e}")
+            print(f"Error fetching data for {ticker}: {e}")
             time.sleep(delay) 
             
     return None 
@@ -96,7 +96,7 @@ def assess_risk(volatility, beta, var_95, sharpe_ratio, latest_news):
     model_name = "ProsusAI/finbert"
     risk_model = pipeline("text-classification", model=model_name)
     response = risk_model(prompt, max_length=200, do_sample=True)[0]['generated_text']
-    os.write(response)
+    print(f"Response from AI: {response}")
     
     if "High" in response:
         risk_level = "High"
