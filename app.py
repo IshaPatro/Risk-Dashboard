@@ -94,7 +94,7 @@ def fetch_stock_data(ticker, retries=3, delay=5):
             time.sleep(delay)        
     return None 
 
-def fetch_and_analyze_news(ticker):
+def fetch_news(ticker):
     """Fetch latest Yahoo Finance news for a ticker and assign risk scores."""
     news_list = news.get_yf_rss(ticker)
     if news_list:
@@ -148,7 +148,7 @@ tickers = st.multiselect("Select Stock Tickers", all_tickers, default=["AAPL", "
 data = []
 for ticker in tickers:
     stock_info = fetch_stock_data(ticker)
-    news_title = fetch_and_analyze_news(ticker)
+    news_title = fetch_news(ticker)
     if stock_info:
         stock_info["Latest News"] = news_title
         risk_level = assess_risk(
