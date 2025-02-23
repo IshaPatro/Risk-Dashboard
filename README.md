@@ -64,8 +64,8 @@ The **ProsusAI/FinBERT** model is used to analyze **financial news sentiment**, 
 ### **Clone the Repository, Create Virtual Environment, and Install Dependencies**
 
 ```bash
-git clone https://github.com/yourusername/QuantumRisk.git
-cd QuantumRisk
+git clone https://github.com/IshaPatro/Risk-Dashboard.git
+cd Risk-Dashboard
 
 # Create a virtual environment
 python -m venv venv
