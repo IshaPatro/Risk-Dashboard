@@ -2,7 +2,7 @@
 
 ## Overview
 
-Risk Radar is a **real-time stock market dashboard** that integrates **AI-powered risk analysis** to provide insights into market volatility, stock performance, and financial risks. Using **live stock data**, AI models classify risk levels based on key financial indicators like **volatility, beta, Value at Risk (VaR), and Sharpe Ratio**. The dashboard provides a clear, color-coded risk assessment to help traders make informed decisions.
+Risk Radar is a **real-time stock market dashboard** that integrates **AI-powered risk analysis** to provide insights into market volatility, stock performance, and financial risks. Using **live stock data**, AI models classify risk levels based on key financial indicators like **volatility, beta, Value at Risk (VaR), and Sharpe Ratio**. The dashboard provides a clear,risk assessment to help traders make informed decisions.
 
 ## Features
 
