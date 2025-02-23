@@ -6,3 +6,4 @@ torch
 pandas
 streamlit-aggrid
 requests_cache
+requests_html
