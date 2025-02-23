@@ -34,7 +34,7 @@ The **ProsusAI/FinBERT** model is used to analyze **financial news sentiment**, 
 
 #### **Risk Classification Conditions**
 - **High Risk** 🔴  
-  - Volatility > 20% OR  
+  - Volatility > 30% OR  
   - Beta > 1.5 OR  
   - AI sentiment on news is **negative**  
 - **Medium Risk** 🟠  
