@@ -1,121 +1,80 @@
-RiskRadar: AI-Powered Stock Insights Dashboard
+# RiskRadar: AI-Powered Stock Insights Dashboard
 
-Overview
+## Overview
 
-QuantumRisk is a real-time stock market dashboard that integrates AI-powered risk analysis to provide insights into market volatility, stock performance, and financial risks. Using live stock data, AI models classify risk levels based on key financial indicators like volatility, beta, Value at Risk (VaR), and Sharpe Ratio. The dashboard provides a clear, color-coded risk assessment to help traders make informed decisions.
+QuantumRisk is a **real-time stock market dashboard** that integrates **AI-powered risk analysis** to provide insights into market volatility, stock performance, and financial risks. Using **live stock data**, AI models classify risk levels based on key financial indicators like **volatility, beta, Value at Risk (VaR), and Sharpe Ratio**. The dashboard provides a clear, color-coded risk assessment to help traders make informed decisions.
 
-Features
+## Features
 
-Real-time stock market data visualization 📊
+- **Real-time stock market data visualization** 📊  
+- **AI-driven risk classification (High, Medium, Low)** 🔍  
+- **Customizable AG-Grid table with filtering & sorting** 🔧  
+- **Pinned Risk Level column for better visibility** 📌  
+- **Auto-updating dashboard for live monitoring** 🔄  
 
-AI-driven risk classification (High, Medium, Low) 🔍
+## Technology Stack
 
-Customizable AG-Grid table with filtering & sorting 🔧
+- **Frontend**: Streamlit, AG-Grid  
+- **Backend**: Python, Pandas, NumPy  
+- **AI Model**: **ProsusAI/FinBERT** (for sentiment-based risk classification)  
+- **Data Sources**: Yahoo Finance (for stock prices), Custom Calculations  
+- **Deployment**: Streamlit Cloud / AWS / Heroku  
 
-Pinned Risk Level column for better visibility 📌
+---
 
-Auto-updating dashboard for live monitoring 🔄
+## Logic & AI Risk Assessment
 
-Technology Stack
+### 1️⃣ **Data Collection & Risk Metric Calculation**
 
-Frontend: Streamlit, AG-Grid
+The dashboard fetches **real-time stock prices** from Yahoo Finance but calculates key risk metrics internally using **historical stock data**. Specifically, **volatility, Sharpe Ratio, and Value at Risk (VaR) are computed from historical stock returns** rather than being fetched from an external source.
 
-Backend: Python, Pandas
+### 2️⃣ **AI Risk Classification using ProsusAI/FinBERT**
 
-AI Models: Hugging Face Transformer Models (FinBERT, Flan-T5, etc.)
+The **ProsusAI/FinBERT** model is used to analyze **financial news sentiment**, which plays a crucial role in determining risk levels. If sentiment is negative, the stock is considered **high risk**, whereas neutral or positive sentiment influences the classification accordingly.
 
-Data Sources: Yahoo Finance, Alpha Vantage API
+#### **Risk Classification Conditions**
+- **High Risk** 🔴  
+  - Volatility > 20% OR  
+  - Beta > 1.5 OR  
+  - AI sentiment on news is **negative**  
+- **Medium Risk** 🟠  
+  - 10% < Volatility ≤ 20% OR  
+  - 1.2 < Beta ≤ 1.5  
+- **Low Risk** 🟢  
+  - Volatility ≤ 10% AND  
+  - Beta ≤ 1.2  
 
-Deployment: Streamlit Cloud / AWS / Heroku
+### 3️⃣ **Dynamic AG-Grid Table**
 
-Logic & AI Risk Assessment
+- **Risk Level Column** pinned to the right 📌  
+- **Conditional formatting** applied:  
+  - High Risk = **Red** 🔴  
+  - Medium Risk = **Orange** 🟠  
+  - Low Risk = **Green** 🟢  
 
-1️⃣ Data Collection
+### 4️⃣ **Live Updates & User Interaction**
 
-The dashboard fetches real-time stock data from APIs like Yahoo Finance. The key data points include:
+- Auto-refresh every 10-30 seconds for latest data  
+- Interactive AG-Grid with sorting, filtering, and pagination  
 
-Stock Price 📈
+---
 
-Daily % Change 🔄
+## Installation & Setup
 
-Volatility (Historical & Implied) 🌪️
+### **Clone the Repository, Create Virtual Environment, and Install Dependencies**
 
-Beta (Market Sensitivity) 📊
-
-Value at Risk (VaR 95%) 📉
-
-Sharpe Ratio (Risk-adjusted Returns) 💰
-
-Latest Financial News 📰
-
-2️⃣ AI Risk Classification
-
-The risk assessment model evaluates the stock based on the following conditions:
-
-High Risk 🔴
-
-Volatility > 20% OR
-
-Beta > 1.5 OR
-
-AI sentiment on news is negative
-
-Medium Risk 🟠
-
-10% < Volatility ≤ 20% OR
-
-1.2 < Beta ≤ 1.5
-
-Low Risk 🟢
-
-Volatility ≤ 10% AND
-
-Beta ≤ 1.2
-
-3️⃣ AI-Powered Risk Classification (FinBERT/Flan-T5 Model)
-
-The AI model takes the latest stock news and financial metrics to predict risk levels:
-
-prompt = f'''
-Latest Financial News: {latest_news}
-Stock Risk Analysis:
-- Volatility: {volatility}%
-- Beta: {beta if beta else "Unknown"}
-- VaR (95%): {var_95}%
-- Sharpe Ratio: {sharpe_ratio}
-Classify the risk as High, Medium, or Low.
-'''
-response = risk_model(prompt)  # AI Model Response
-
-4️⃣ Dynamic AG-Grid Table
-
-Risk Level Column pinned to the right 📌
-
-Conditional formatting applied:
-
-High Risk = Red 🔴
-
-Medium Risk = Orange 🟠
-
-Low Risk = Green 🟢
-
-5️⃣ Live Updates & User Interaction
-
-Auto-refresh every 10-30 seconds for latest data
-
-Interactive AG-Grid with sorting, filtering, and pagination
-
-Installation & Setup
-
-1️⃣ Clone the Repository
-
+```bash
 git clone https://github.com/yourusername/QuantumRisk.git
 cd QuantumRisk
 
-2️⃣ Install Dependencies
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On macOS/Linux
+venv\Scripts\activate  # On Windows
 
+# Install dependencies
 pip install -r requirements.txt
 
-3️⃣ Run the Streamlit App
-
+# Run the Streamlit app
 streamlit run app.py
+```
