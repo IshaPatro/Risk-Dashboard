@@ -144,7 +144,12 @@ def assess_risk(volatility, beta, var_95, sharpe_ratio, latest_news):
             risk_level = min(risk_level, "Medium")  
 
     except Exception as e:
-        return "API Error"
+        if volatility > 30 or (beta and beta > 1.5):
+            return "High"
+        elif volatility > 10 or (beta and beta > 1.2):
+            return "Medium" 
+        else:
+            return "Low"
 
     return risk_level
 
