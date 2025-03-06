@@ -14,9 +14,11 @@ import streamlit as st
 import numpy as np
 import os
 from dotenv import load_dotenv
+#import ssl
 
 tokenizer = BertTokenizer.from_pretrained("yiyanghkust/finbert-tone")
 model = BertForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
+#ssl._create_default_https_context = ssl._create_stdlib_context
 
 load_dotenv()
 if "HF_API_KEY" in st.secrets:
@@ -114,7 +116,12 @@ def assess_risk(volatility, beta, var_95, sharpe_ratio, latest_news):
         print("Raw API Response:", response_json)
         
         if not isinstance(response_json, list) or not response_json or not isinstance(response_json[0], list):
-            return "API Error"
+            if volatility > 30 or (beta and beta > 1.5):
+                return "High"
+            elif volatility > 10 or (beta and beta > 1.2):
+                return "Medium" 
+            else:
+                return "Low" 
 
         scores = {item["label"]: item["score"] for item in response_json[0]}
         negative_score = scores.get("negative", 0)
@@ -177,11 +184,3 @@ gb.configure_side_bar()
 grid_options = gb.build()
 grid_options["domLayout"] = "autoHeight"
 AgGrid(df, gridOptions=grid_options)
-
-
-
-
-
-
-
-
