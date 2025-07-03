@@ -1,10 +1,10 @@
 streamlit
 yahoo_fin
-yfinance
-transformers
-torch
+yfinance==0.2.54
 pandas
+numpy
 streamlit-aggrid
-requests_cache
+curl_cffi
 requests_html
-dotenv
+python-dotenv
+google-generativeai
