@@ -4,7 +4,6 @@ import pandas as pd
 import yfinance as yf
 from yahoo_fin import news, stock_info
 from st_aggrid import AgGrid, GridOptionsBuilder
-from curl_cffi import requests
 import numpy as np
 import os
 from dotenv import load_dotenv
@@ -12,12 +11,12 @@ import google.generativeai as genai
 
 load_dotenv()
 
-if "GEMINI_API_KEY" in st.secrets:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"] 
-else:
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
+# if "GEMINI_API_KEY" in st.secrets:
+#     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"] 
+# else:
+#     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -74,12 +73,10 @@ def calculate_risk_metrics(historical_data, risk_free_rate=0.0, confidence_level
         "VaR (95%)": round(var * 100, 2)
     }
 
-session = requests.Session(impersonate="chrome")
-
 def fetch_stock_data(ticker, retries=3, delay=5):
     for attempt in range(retries):
         try:
-            stock = yf.Ticker(ticker, session=session)
+            stock = yf.Ticker(ticker)
             info = stock.info
             if not info:
                 print(f"No data found for {ticker}")
