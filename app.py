@@ -8,6 +8,8 @@ import numpy as np
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
+import pickle
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -73,14 +75,26 @@ def calculate_risk_metrics(historical_data, risk_free_rate=0.0, confidence_level
         "VaR (95%)": round(var * 100, 2)
     }
 
-def fetch_stock_data(ticker, retries=3, delay=5):
-    for attempt in range(retries):
+@st.cache_data(ttl=1800)
+def get_cached_stock_data(ticker):
+    return fetch_stock_data_internal(ticker)
+
+def fetch_stock_data_internal(ticker):
+    max_retries = 2
+    base_delay = 10
+    
+    for attempt in range(max_retries):
         try:
             stock = yf.Ticker(ticker)
+            
+            time.sleep(3)
+            
             info = stock.info
-            if not info:
-                print(f"No data found for {ticker}")
+            if not info or len(info) < 5:
+                print(f"Limited data found for {ticker}")
                 return None
+            
+            time.sleep(2)
             
             current_price = info.get("regularMarketPrice") or info.get("currentPrice")
             previous_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
@@ -89,9 +103,15 @@ def fetch_stock_data(ticker, retries=3, delay=5):
                 one_day_change_pct = round(((current_price - previous_close) / previous_close) * 100, 2)
             else:
                 one_day_change_pct = None
-                
-            historical_data = stock.history(period="30d")
-            risk_metrics = calculate_risk_metrics(historical_data)
+            
+            time.sleep(2)
+            
+            try:
+                historical_data = stock.history(period="30d")
+                risk_metrics = calculate_risk_metrics(historical_data)
+            except Exception as e:
+                print(f"Error fetching historical data for {ticker}: {e}")
+                risk_metrics = {"Volatility": 0.0, "Sharpe Ratio": 0.0, "VaR (95%)": 0.0}
     
             return {
                 "Ticker": ticker,
@@ -106,18 +126,31 @@ def fetch_stock_data(ticker, retries=3, delay=5):
             }
         
         except Exception as e:
-            print(f"Error fetching data for {ticker}: {e}")
-            if attempt < retries - 1:
-                print(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
-                time.sleep(delay)
-                delay *= 2
+            if "Too Many Requests" in str(e) or "rate limit" in str(e).lower():
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Rate limited for {ticker}. Waiting {delay} seconds before retry...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    print(f"Rate limit exceeded for {ticker} after all retries")
+                    return None
             else:
+                print(f"Error fetching data for {ticker}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(5)
+                    continue
                 return None
     
     return None
 
+def fetch_stock_data(ticker):
+    return get_cached_stock_data(ticker)
+
+@st.cache_data(ttl=3600)
 def fetch_news(ticker):
     try:
+        time.sleep(1)
         news_list = news.get_yf_rss(ticker)
         if news_list:
             return news_list[0]["title"]
@@ -159,10 +192,30 @@ except Exception as e:
     ]
 
 st.title("RiskRadar: AI-Powered Stock Insights Dashboard")
-tickers = st.multiselect("Select Stock Tickers", all_tickers, default=["AAPL", "TSLA", "GOOGL", "AMZN", "MSFT"])
+
+st.warning("⚠️ Yahoo Finance has strict rate limits. Please select only 2-3 stocks to avoid errors. Data is cached for 30 minutes.")
+
+tickers = st.multiselect("Select Stock Tickers (Max 3 recommended)", all_tickers, default=["AAPL", "MSFT", "GOOGL"])
+
+if len(tickers) > 5:
+    st.error("⛔ Please select maximum 5 stocks to avoid rate limiting issues.")
+    st.stop()
+
+if not tickers:
+    st.warning("Please select at least one stock ticker.")
+    st.stop()
+
+if len(tickers) > 3:
+    st.warning(f"⚠️ You selected {len(tickers)} stocks. This may take longer and could hit rate limits.")
+
+progress_bar = st.progress(0)
+status_text = st.empty()
 
 data = []
 for i, ticker in enumerate(tickers):    
+    status_text.text(f"Fetching data for {ticker}... ({i+1}/{len(tickers)})")
+    progress_bar.progress((i + 1) / len(tickers))
+    
     stock_info = fetch_stock_data(ticker)
     if stock_info:
         news_title = fetch_news(ticker)
@@ -176,8 +229,18 @@ for i, ticker in enumerate(tickers):
         )
         stock_info["Risk"] = risk_level
         data.append(stock_info)
+    else:
+        st.warning(f"⚠️ Could not fetch data for {ticker} - possibly rate limited")
+    
+    if i < len(tickers) - 1:
+        time.sleep(3)
+
+progress_bar.empty()
+status_text.text("✅ Data fetching completed!")
 
 if data:
+    st.success(f"Successfully loaded data for {len(data)} out of {len(tickers)} stocks")
+    
     df = pd.DataFrame(data)
     
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -196,5 +259,8 @@ if data:
     grid_options["domLayout"] = "autoHeight"
     
     AgGrid(df, gridOptions=grid_options)
+    
+    st.info("💡 Data is cached for 30 minutes. Refresh the page to get updated data.")
 else:
-    st.error("No data could be fetched. Please check your internet connection and try again.")
+    st.error("❌ No data could be fetched. Yahoo Finance may be rate limiting. Please wait a few minutes and try with fewer stocks.")
+    st.info("💡 Try selecting only 2-3 stocks and wait a few minutes between requests.")
