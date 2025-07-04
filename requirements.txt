@@ -4,7 +4,6 @@ yfinance==0.2.54
 pandas
 numpy
 streamlit-aggrid
-requests
 requests_html
 python-dotenv
 google-generativeai

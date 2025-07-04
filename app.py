@@ -6,34 +6,20 @@ from yahoo_fin import news, stock_info
 from st_aggrid import AgGrid, GridOptionsBuilder
 import numpy as np
 import os
-import requests
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import google.generativeai as genai
 
 load_dotenv()
 
-if "GEMINI_API_KEY" in st.secrets:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"] 
-else:
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# if "GEMINI_API_KEY" in st.secrets:
+#     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"] 
+# else:
+#     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
-
-if 'stock_cache' not in st.session_state:
-    st.session_state.stock_cache = {}
-
-if 'news_cache' not in st.session_state:
-    st.session_state.news_cache = {}
-
-yf.pdr_override()
-
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-})
 
 def get_sentiment(text):
     if not GEMINI_API_KEY:
@@ -87,39 +73,27 @@ def calculate_risk_metrics(historical_data, risk_free_rate=0.0, confidence_level
         "VaR (95%)": round(var * 100, 2)
     }
 
-def fetch_stock_data(ticker, retries=2, base_delay=10):
-    cache_key = f"{ticker}_{datetime.now().strftime('%Y-%m-%d_%H')}"
-    
-    if cache_key in st.session_state.stock_cache:
-        return st.session_state.stock_cache[cache_key]
-    
-    time.sleep(2)
-    
+def fetch_stock_data(ticker, retries=3, delay=5):
     for attempt in range(retries):
         try:
-            stock = yf.Ticker(ticker, session=session)
-            
-            time.sleep(1)
+            stock = yf.Ticker(ticker)
             info = stock.info
+            if not info:
+                print(f"No data found for {ticker}")
+                return None
             
-            if not info or len(info) < 5:
-                print(f"No sufficient data found for {ticker}")
-                time.sleep(3)
-                continue
-            
-            current_price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("price")
+            current_price = info.get("regularMarketPrice") or info.get("currentPrice")
             previous_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
             
             if current_price and previous_close:
                 one_day_change_pct = round(((current_price - previous_close) / previous_close) * 100, 2)
             else:
                 one_day_change_pct = None
-            
-            time.sleep(1)
+                
             historical_data = stock.history(period="30d")
             risk_metrics = calculate_risk_metrics(historical_data)
     
-            result = {
+            return {
                 "Ticker": ticker,
                 "Current Price ($)": current_price,
                 "1-Day Change (%)": one_day_change_pct,
@@ -130,44 +104,27 @@ def fetch_stock_data(ticker, retries=2, base_delay=10):
                 "VaR (95%)": risk_metrics["VaR (95%)"],
                 "Sharpe Ratio": risk_metrics["Sharpe Ratio"]
             }
-            
-            st.session_state.stock_cache[cache_key] = result
-            return result
         
         except Exception as e:
-            error_msg = str(e).lower()
-            if "too many requests" in error_msg or "rate limit" in error_msg:
-                delay = base_delay * (2 ** attempt)
-                print(f"Rate limited for {ticker}. Waiting {delay} seconds... (Attempt {attempt+1}/{retries})")
+            print(f"Error fetching data for {ticker}: {e}")
+            if attempt < retries - 1:
+                print(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
                 time.sleep(delay)
+                delay *= 2
             else:
-                print(f"Error fetching data for {ticker}: {e}")
-                if attempt < retries - 1:
-                    time.sleep(5)
+                return None
     
     return None
 
 def fetch_news(ticker):
-    cache_key = f"news_{ticker}_{datetime.now().strftime('%Y-%m-%d_%H')}"
-    
-    if cache_key in st.session_state.news_cache:
-        return st.session_state.news_cache[cache_key]
-    
     try:
-        time.sleep(1)
         news_list = news.get_yf_rss(ticker)
-        if news_list and len(news_list) > 0:
-            result = news_list[0]["title"]
-        else:
-            result = "No recent news available"
-        
-        st.session_state.news_cache[cache_key] = result
-        return result
+        if news_list:
+            return news_list[0]["title"]
+        return "No recent news available"
     except Exception as e:
         print(f"Error fetching news for {ticker}: {e}")
-        result = "No recent news available"
-        st.session_state.news_cache[cache_key] = result
-        return result
+        return "No recent news available"
 
 def assess_risk(volatility, beta, var_95, sharpe_ratio, latest_news):
     sentiment_score = get_sentiment(latest_news)
@@ -202,33 +159,10 @@ except Exception as e:
     ]
 
 st.title("RiskRadar: AI-Powered Stock Insights Dashboard")
-st.write("⚡ Enhanced with rate limiting protection and caching")
-
-col1, col2 = st.columns([4, 1])
-with col2:
-    if st.button("🗑️ Clear Cache"):
-        st.session_state.stock_cache = {}
-        st.session_state.news_cache = {}
-        st.success("Cache cleared!")
-
-tickers = st.multiselect("Select Stock Tickers", all_tickers, default=["AAPL", "TSLA", "GOOGL"])
-
-if not tickers:
-    st.warning("Please select at least one stock ticker.")
-    st.stop()
-
-if len(tickers) > 8:
-    st.warning("⚠️ To avoid rate limits, please select 8 or fewer tickers.")
-    st.stop()
-
-progress_bar = st.progress(0)
-status_text = st.empty()
+tickers = st.multiselect("Select Stock Tickers", all_tickers, default=["AAPL", "TSLA", "GOOGL", "AMZN", "MSFT"])
 
 data = []
-for i, ticker in enumerate(tickers):
-    status_text.text(f"Fetching data for {ticker}... ({i+1}/{len(tickers)})")
-    progress_bar.progress((i + 1) / len(tickers))
-    
+for i, ticker in enumerate(tickers):    
     stock_info = fetch_stock_data(ticker)
     if stock_info:
         news_title = fetch_news(ticker)
@@ -242,14 +176,6 @@ for i, ticker in enumerate(tickers):
         )
         stock_info["Risk"] = risk_level
         data.append(stock_info)
-    
-    if i < len(tickers) - 1:
-        time.sleep(3)
-
-status_text.text("✅ Data fetched successfully!")
-time.sleep(1)
-status_text.empty()
-progress_bar.empty()
 
 if data:
     df = pd.DataFrame(data)
