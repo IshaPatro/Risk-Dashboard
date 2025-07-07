@@ -1,9 +1,7 @@
 streamlit
-yahoo_fin
-yfinance==0.2.54
 pandas
 numpy
 streamlit-aggrid
-requests_html
+requests
 python-dotenv
 google-generativeai

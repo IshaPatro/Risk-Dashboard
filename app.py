@@ -1,27 +1,26 @@
 import time
 import streamlit as st
 import pandas as pd
-import yfinance as yf
-from yahoo_fin import news, stock_info
+import requests
 from st_aggrid import AgGrid, GridOptionsBuilder
 import numpy as np
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
-import pickle
-from datetime import datetime, timedelta
 
 load_dotenv()
 
-# if "GEMINI_API_KEY" in st.secrets:
-#     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"] 
-# else:
-#     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
+
+if not ALPHA_VANTAGE_API_KEY:
+    st.error("⚠️ Please set your ALPHA_VANTAGE_API_KEY in your environment variables or Streamlit secrets")
+    st.info("Get your free API key from: https://www.alphavantage.co/support/#api-key")
+    st.stop()
 
 def get_sentiment(text):
     if not GEMINI_API_KEY:
@@ -54,151 +53,201 @@ def get_sentiment(text):
         print(f"Error in sentiment analysis: {e}")
         return 0.0
 
-def calculate_risk_metrics(historical_data, risk_free_rate=0.0, confidence_level=0.95):
-    if historical_data is None or len(historical_data) < 2:
-        return {"Volatility": 0.0, "Sharpe Ratio": 0.0, "VaR (95%)": 0.0}
-    
-    historical_data['Daily Return'] = historical_data['Close'].pct_change()
-    daily_returns = historical_data['Daily Return'].dropna()
-    
-    if len(daily_returns) < 2:
-        return {"Volatility": 0.0, "Sharpe Ratio": 0.0, "VaR (95%)": 0.0}
-    
-    volatility = daily_returns.std() * np.sqrt(252)
-    avg_return = daily_returns.mean()
-    sharpe_ratio = (avg_return - risk_free_rate) / daily_returns.std() if daily_returns.std() > 0 else 0
-    var = np.percentile(daily_returns, 100 * (1 - confidence_level))
-
-    return {
-        "Volatility": round(volatility * 100, 2),
-        "Sharpe Ratio": round(sharpe_ratio, 2),
-        "VaR (95%)": round(var * 100, 2)
+@st.cache_data(ttl=3600)
+def get_alpha_vantage_quote(symbol):
+    """Get real-time quote from Alpha Vantage GLOBAL_QUOTE endpoint"""
+    url = "https://www.alphavantage.co/query"
+    params = {
+        "function": "GLOBAL_QUOTE",
+        "symbol": symbol,
+        "apikey": ALPHA_VANTAGE_API_KEY
     }
-
-@st.cache_data(ttl=1800)
-def get_cached_stock_data(ticker):
-    return fetch_stock_data_internal(ticker)
-
-def fetch_stock_data_internal(ticker):
-    max_retries = 2
-    base_delay = 10
     
-    for attempt in range(max_retries):
-        try:
-            stock = yf.Ticker(ticker)
-            
-            time.sleep(3)
-            
-            info = stock.info
-            if not info or len(info) < 5:
-                print(f"Limited data found for {ticker}")
-                return None
-            
-            time.sleep(2)
-            
-            current_price = info.get("regularMarketPrice") or info.get("currentPrice")
-            previous_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-            
-            if current_price and previous_close:
-                one_day_change_pct = round(((current_price - previous_close) / previous_close) * 100, 2)
-            else:
-                one_day_change_pct = None
-            
-            time.sleep(2)
-            
-            try:
-                historical_data = stock.history(period="30d")
-                risk_metrics = calculate_risk_metrics(historical_data)
-            except Exception as e:
-                print(f"Error fetching historical data for {ticker}: {e}")
-                risk_metrics = {"Volatility": 0.0, "Sharpe Ratio": 0.0, "VaR (95%)": 0.0}
-    
-            return {
-                "Ticker": ticker,
-                "Current Price ($)": current_price,
-                "1-Day Change (%)": one_day_change_pct,
-                "PE Ratio": round(info.get("trailingPE"), 2) if info.get("trailingPE") else None,
-                "PB Ratio": round(info.get("priceToBook"), 2) if info.get("priceToBook") else None,
-                "Volatility": risk_metrics["Volatility"],
-                "Beta": info.get("beta") if info.get("beta") else None,
-                "VaR (95%)": risk_metrics["VaR (95%)"],
-                "Sharpe Ratio": risk_metrics["Sharpe Ratio"]
-            }
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
         
-        except Exception as e:
-            if "Too Many Requests" in str(e) or "rate limit" in str(e).lower():
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
-                    print(f"Rate limited for {ticker}. Waiting {delay} seconds before retry...")
-                    time.sleep(delay)
-                    continue
-                else:
-                    print(f"Rate limit exceeded for {ticker} after all retries")
-                    return None
-            else:
-                print(f"Error fetching data for {ticker}: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(5)
-                    continue
-                return None
+        if "Global Quote" in data:
+            return data["Global Quote"]
+        elif "Error Message" in data:
+            print(f"Alpha Vantage error for {symbol}: {data['Error Message']}")
+            return None
+        elif "Note" in data:
+            print(f"Alpha Vantage rate limit for {symbol}: {data['Note']}")
+            return None
+        else:
+            print(f"Unexpected response format for {symbol}: {data}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Request error for {symbol}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error fetching Alpha Vantage data for {symbol}: {e}")
+        return None
+
+@st.cache_data(ttl=3600)
+def get_alpha_vantage_overview(symbol):
+    """Get company overview from Alpha Vantage"""
+    url = "https://www.alphavantage.co/query"
+    params = {
+        "function": "OVERVIEW",
+        "symbol": symbol,
+        "apikey": ALPHA_VANTAGE_API_KEY
+    }
     
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "Symbol" in data:
+            return data
+        else:
+            print(f"No overview data available for {symbol}")
+            return None
+            
+    except Exception as e:
+        print(f"Error fetching overview for {symbol}: {e}")
+        return None
+
+def calculate_basic_metrics(current_price, prev_close):
+    """Calculate basic metrics from price data"""
+    if current_price and prev_close:
+        try:
+            change_pct = ((current_price - prev_close) / prev_close) * 100
+            return round(change_pct, 2)
+        except (ValueError, ZeroDivisionError):
+            return None
     return None
 
 def fetch_stock_data(ticker):
-    return get_cached_stock_data(ticker)
-
-@st.cache_data(ttl=3600)
-def fetch_news(ticker):
+    """Fetch stock data from Alpha Vantage"""
+    quote_data = get_alpha_vantage_quote(ticker)
+    
+    if not quote_data:
+        return None
+    
     try:
-        time.sleep(1)
-        news_list = news.get_yf_rss(ticker)
-        if news_list:
-            return news_list[0]["title"]
-        return "No recent news available"
+        current_price = float(quote_data.get("05. price", 0))
+        prev_close = float(quote_data.get("08. previous close", 0))
+        change_pct = calculate_basic_metrics(current_price, prev_close)
+        
+        overview_data = get_alpha_vantage_overview(ticker)
+        
+        pe_ratio = None
+        pb_ratio = None
+        beta = None
+        
+        if overview_data:
+            try:
+                pe_ratio = float(overview_data.get("PERatio", 0)) if overview_data.get("PERatio") != "None" else None
+                pb_ratio = float(overview_data.get("PriceToBookRatio", 0)) if overview_data.get("PriceToBookRatio") != "None" else None
+                beta = float(overview_data.get("Beta", 0)) if overview_data.get("Beta") != "None" else None
+            except (ValueError, TypeError):
+                pass
+        
+        volatility = calculate_volatility_estimate(current_price, prev_close)
+        
+        return {
+            "Ticker": ticker,
+            "Current Price ($)": current_price,
+            "1-Day Change (%)": change_pct,
+            "PE Ratio": round(pe_ratio, 2) if pe_ratio else None,
+            "PB Ratio": round(pb_ratio, 2) if pb_ratio else None,
+            "Volatility (Est.)": volatility,
+            "Beta": beta,
+            "Volume": int(quote_data.get("06. volume", 0)),
+            "Market Cap": overview_data.get("MarketCapitalization", "N/A") if overview_data else "N/A"
+        }
+        
+    except (ValueError, TypeError, KeyError) as e:
+        print(f"Error processing data for {ticker}: {e}")
+        return None
+
+def calculate_volatility_estimate(current_price, prev_close):
+    """Estimate volatility from daily price change"""
+    if current_price and prev_close:
+        try:
+            daily_return = abs((current_price - prev_close) / prev_close)
+            volatility_est = daily_return * np.sqrt(252) * 100
+            return round(volatility_est, 2)
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+    return 0.0
+
+@st.cache_data(ttl=7200)
+def fetch_news_simple(ticker):
+    """Simple news fetching - placeholder for now"""
+    try:
+        url = "https://www.alphavantage.co/query"
+        params = {
+            "function": "NEWS_SENTIMENT",
+            "tickers": ticker,
+            "limit": 1,
+            "apikey": ALPHA_VANTAGE_API_KEY
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        
+        if "feed" in data and len(data["feed"]) > 0:
+            return data["feed"][0]["title"]
+        else:
+            return f"Recent market activity for {ticker}"
+            
     except Exception as e:
         print(f"Error fetching news for {ticker}: {e}")
-        return "No recent news available"
+        return f"Market data available for {ticker}"
 
-def assess_risk(volatility, beta, var_95, sharpe_ratio, latest_news):
+def assess_risk_simple(volatility, beta, change_pct, latest_news):
+    """Simplified risk assessment"""
     sentiment_score = get_sentiment(latest_news)
     
-    if sentiment_score < -0.50:
+    risk_level = "Medium"
+    
+    if sentiment_score < -0.5:
         risk_level = "High"
-    elif sentiment_score < -0.20:
-        risk_level = "Medium"
-    elif sentiment_score > 0.20:
+    elif sentiment_score > 0.3:
         risk_level = "Low"
-    else:
-        risk_level = "Medium"
-
-    if volatility > 30 or (beta and beta > 1.5):
+    
+    if volatility and volatility > 25:
         risk_level = "High"
-    elif volatility > 10 or (beta and beta > 1.2):
+    elif volatility and volatility > 15:
         if risk_level == "Low":
             risk_level = "Medium"
     
+    if beta and beta > 1.5:
+        risk_level = "High"
+    
+    if change_pct and abs(change_pct) > 5:
+        risk_level = "High"
+    
     return risk_level
 
-try:
-    all_tickers = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]['Symbol'].tolist()
-except Exception as e:
-    print(f"Error fetching S&P 500 list: {e}")
-    all_tickers = [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK.B", "UNH", "JNJ",
-        "V", "PG", "JPM", "HD", "MA", "NFLX", "DIS", "ADBE", "PYPL", "CMCSA",
-        "VZ", "INTC", "T", "PFE", "WMT", "KO", "PEP", "ABT", "CRM", "CSCO",
-        "XOM", "TMO", "COST", "AVGO", "ACN", "DHR", "LLY", "TXN", "NEE", "WFC",
-        "QCOM", "BMY", "MDT", "UNP", "PM", "LOW", "IBM", "AMGN", "HON", "SPGI"
-    ]
+# Popular stock tickers for selection
+popular_tickers = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "ADBE", "CRM",
+    "PYPL", "INTC", "AMD", "ORCL", "IBM", "CSCO", "V", "MA", "JPM", "BAC",
+    "WMT", "TGT", "COST", "HD", "NKE", "SBUX", "MCD", "KO", "PEP", "JNJ",
+    "PFE", "MRNA", "UNH", "CVS", "XOM", "CVX", "NEE", "DIS", "UBER", "LYFT"
+]
 
 st.title("RiskRadar: AI-Powered Stock Insights Dashboard")
+st.write("📊 **Powered by Alpha Vantage API**")
 
-st.warning("⚠️ Yahoo Finance has strict rate limits. Please select only 2-3 stocks to avoid errors. Data is cached for 30 minutes.")
+st.info("🔹 Free tier: 25 requests/day | 🔹 Data cached for 1 hour | 🔹 Select max 3-5 stocks")
 
-tickers = st.multiselect("Select Stock Tickers (Max 3 recommended)", all_tickers, default=["AAPL", "MSFT", "GOOGL"])
+tickers = st.multiselect(
+    "Select Stock Tickers", 
+    popular_tickers, 
+    default=["AAPL", "MSFT", "GOOGL"],
+    help="Choose up to 5 stocks to avoid hitting API limits"
+)
 
 if len(tickers) > 5:
-    st.error("⛔ Please select maximum 5 stocks to avoid rate limiting issues.")
+    st.error("⛔ Please select maximum 5 stocks to avoid API rate limits (25 requests/day)")
     st.stop()
 
 if not tickers:
@@ -206,40 +255,48 @@ if not tickers:
     st.stop()
 
 if len(tickers) > 3:
-    st.warning(f"⚠️ You selected {len(tickers)} stocks. This may take longer and could hit rate limits.")
+    st.warning(f"⚠️ You selected {len(tickers)} stocks. With free API tier (25 calls/day), use sparingly.")
 
 progress_bar = st.progress(0)
 status_text = st.empty()
 
 data = []
-for i, ticker in enumerate(tickers):    
+api_calls_used = 0
+
+for i, ticker in enumerate(tickers):
     status_text.text(f"Fetching data for {ticker}... ({i+1}/{len(tickers)})")
     progress_bar.progress((i + 1) / len(tickers))
     
     stock_info = fetch_stock_data(ticker)
+    api_calls_used += 2  # Quote + Overview calls
+    
     if stock_info:
-        news_title = fetch_news(ticker)
-        stock_info["Latest News"] = news_title      
-        risk_level = assess_risk(
-            stock_info["Volatility"],
-            stock_info["Beta"],
-            stock_info["VaR (95%)"],
-            stock_info["Sharpe Ratio"],
+        news_title = fetch_news_simple(ticker)
+        api_calls_used += 1  # News call
+        
+        stock_info["Latest News"] = news_title
+        
+        risk_level = assess_risk_simple(
+            stock_info.get("Volatility (Est.)"),
+            stock_info.get("Beta"),
+            stock_info.get("1-Day Change (%)"),
             stock_info["Latest News"]
         )
-        stock_info["Risk"] = risk_level
+        stock_info["Risk Level"] = risk_level
         data.append(stock_info)
     else:
-        st.warning(f"⚠️ Could not fetch data for {ticker} - possibly rate limited")
+        st.warning(f"⚠️ Could not fetch data for {ticker}")
     
+    # Small delay between requests
     if i < len(tickers) - 1:
-        time.sleep(3)
+        time.sleep(1)
 
 progress_bar.empty()
 status_text.text("✅ Data fetching completed!")
 
 if data:
-    st.success(f"Successfully loaded data for {len(data)} out of {len(tickers)} stocks")
+    st.success(f"✅ Successfully loaded {len(data)} out of {len(tickers)} stocks")
+    st.info(f"📊 API calls used: ~{api_calls_used} out of 25 daily limit")
     
     df = pd.DataFrame(data)
     
@@ -252,7 +309,7 @@ if data:
     )
     gb.configure_column("Latest News", minWidth=200)
     gb.configure_column("Ticker", pinned="left")
-    gb.configure_column("Risk", pinned="right")
+    gb.configure_column("Risk Level", pinned="right")
     gb.configure_pagination()
     gb.configure_side_bar()
     grid_options = gb.build()
@@ -260,7 +317,9 @@ if data:
     
     AgGrid(df, gridOptions=grid_options)
     
-    st.info("💡 Data is cached for 30 minutes. Refresh the page to get updated data.")
+    st.info("💡 Data is cached for 1 hour. Refresh page for updated data.")
+    
 else:
-    st.error("❌ No data could be fetched. Yahoo Finance may be rate limiting. Please wait a few minutes and try with fewer stocks.")
-    st.info("💡 Try selecting only 2-3 stocks and wait a few minutes between requests.")
+    st.error("❌ No data could be fetched from Alpha Vantage")
+    st.info("💡 Check your API key and ensure you haven't exceeded the 25 requests/day limit")
+    st.info("🔗 Get your free API key: https://www.alphavantage.co/support/#api-key")
