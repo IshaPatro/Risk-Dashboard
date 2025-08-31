@@ -235,14 +235,10 @@ popular_tickers = [
 ]
 
 st.title("RiskRadar: AI-Powered Stock Insights Dashboard")
-st.write("📊 **Powered by Alpha Vantage API**")
-
-st.info("🔹 Free tier: 25 requests/day | 🔹 Data cached for 1 hour | 🔹 Select max 3-5 stocks")
-
 tickers = st.multiselect(
     "Select Stock Tickers", 
     popular_tickers, 
-    default=["AAPL", "MSFT", "GOOGL"],
+    default=["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"],
     help="Choose up to 5 stocks to avoid hitting API limits"
 )
 
@@ -292,12 +288,8 @@ for i, ticker in enumerate(tickers):
         time.sleep(1)
 
 progress_bar.empty()
-status_text.text("✅ Data fetching completed!")
 
 if data:
-    st.success(f"✅ Successfully loaded {len(data)} out of {len(tickers)} stocks")
-    st.info(f"📊 API calls used: ~{api_calls_used} out of 25 daily limit")
-    
     df = pd.DataFrame(data)
     
     gb = GridOptionsBuilder.from_dataframe(df)
