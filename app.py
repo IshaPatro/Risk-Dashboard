@@ -250,9 +250,6 @@ if not tickers:
     st.warning("Please select at least one stock ticker.")
     st.stop()
 
-if len(tickers) > 3:
-    st.warning(f"⚠️ You selected {len(tickers)} stocks. With free API tier (25 calls/day), use sparingly.")
-
 progress_bar = st.progress(0)
 status_text = st.empty()
 
