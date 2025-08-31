@@ -306,8 +306,6 @@ if data:
     
     AgGrid(df, gridOptions=grid_options)
     
-    st.info("💡 Data is cached for 1 hour. Refresh page for updated data.")
-    
 else:
     st.error("❌ No data could be fetched from Alpha Vantage")
     st.info("💡 Check your API key and ensure you haven't exceeded the 25 requests/day limit")
