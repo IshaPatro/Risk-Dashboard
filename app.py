@@ -191,8 +191,8 @@ def fetch_data(tickers_str, period):
             prices = prices.to_frame(name=fetch_list[0])
             
         prices.dropna(how='all', inplace=True)
-        prices.fillna(method='ffill', inplace=True)
-        prices.fillna(method='bfill', inplace=True)
+        prices.ffill(inplace=True)
+        prices.bfill(inplace=True)
         
         valid_tickers = [t for t in tickers if t in prices.columns and not prices[t].isna().all()]
         
