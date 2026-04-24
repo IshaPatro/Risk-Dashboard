@@ -1,7 +1,8 @@
 streamlit
 pandas
 numpy
-streamlit-aggrid
+yfinance
+plotly
+scipy
 requests
 python-dotenv
-google-generativeai
